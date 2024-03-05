@@ -1,18 +1,22 @@
 # Makefile for ACDC training
+# Updated to include A and G arguments.
 # Run "make all" to run three iterations of ACDC
 
 # Baseline segmentation and OCR models
-segment=pretrained_print_layout.mlmodel
-ocr=print_transcription_NEW.mlmodel
+segment=1col_hebrew_central_99.mlmodel
+ocr=sinai_no_voc_61.mlmodel
 N=7
 M=5
+A=7
+G=25
 
 KRAKEN_DEVICE=
 # Uncomment this line to use a GPU with kraken
 # KRAKEN_DEVICE=-d cuda:0
 
 # Edit this to change spark options for running passim etc.
-export SPARK_SUBMIT_ARGS=--executor-memory 4G --driver-memory 4G
+# default: export SPARK_SUBMIT_ARGS=--executor-memory 4G --driver-memory 4G
+export SPARK_SUBMIT_ARGS=--master local[55] --executor-memory 110G --driver-memory 8G
 
 SWORKERS=10
 SMEM=10
@@ -59,8 +63,8 @@ comma := ,
 %/lines.json/_SUCCESS:	%/out.json/_SUCCESS
 	$(call slurm_run,acdc-run wit-lines.py $(dir $<) $(dir $@))
 
-%-n$(N)m$(M).out/out.json/_SUCCESS:	%.in/_SUCCESS
-	$(call spark_run,seriatim --docwise --log-level INFO --floating-ngrams --complete-lines -n $(N) -m $(M) --fields ref --filterpairs 'ref = 1 AND ref2 = 0' $(dir $<) $(dir $(patsubst %/,%,$(dir $@))))
+%-n$(N)m$(M)a$(A)g$(G).out/out.json/_SUCCESS:	%.in/_SUCCESS
+	$(call spark_run,seriatim --docwise --log-level INFO --floating-ngrams --complete-lines -n $(N) -m $(M) -a $(A) -g $(G) --fields ref --filterpairs 'ref = 1 AND ref2 = 0' $(dir $<) $(dir $(patsubst %/,%,$(dir $@))))
 
 images/_SUCCESS:	$(patsubst %,images/%/_SUCCESS,$(basename $(notdir $(wildcard pdf/*))))
 	touch $@
@@ -70,10 +74,11 @@ images/%/_SUCCESS:	pdf/%.pdf
 
 splits/_SUCCESS:	images/_SUCCESS
 	mkdir -p $(dir $@)
-	find images -type f -name \*.png | split -l 100 - $(dir $@)x
+	find images -type f -name \*.jpg | split -l 100 - $(dir $@)x
 	touch $@
 
 print/_SUCCESS:	splits/_SUCCESS
+	mkdir -p $(dir $@)
 	$(MAKE) `ls -1 splits/x* | sed -e 's/splits\//print\/jobs\/_/'`
 	touch $@
 
@@ -82,22 +87,22 @@ print/jobs/_%:	splits/%
 	$(call slurm_run,cat $< | batkraken.sh print $(KRAKEN_DEVICE) --alto segment --model $(segment) -d horizontal-rl --baseline ocr --model $(ocr) --base-dir R >& $@.err)
 	touch $@
 
-gen1-print/_SUCCESS:	 print-n$(N)m$(M).out/alto-nall/ft_best.mlmodel splits/_SUCCESS
+gen1-print/_SUCCESS:	 print-n$(N)m$(M)a$(A)g$(G).out/alto-nall/ft_best.mlmodel splits/_SUCCESS
 	$(MAKE) `ls -1 splits/x* | sed -e 's/splits\//gen1-print\/jobs\/_/'`
 	touch $@
 
 gen1-print/jobs/_%:	 splits/%
 	mkdir -p $(dir $@)
-	$(call gpu_run,cat $< | batkraken.sh gen1-print --alto $(KRAKEN_DEVICE) segment --model $(segment) -d horizontal-rl --baseline ocr --model print-n$(N)m$(M).out/alto-nall/ft_best.mlmodel --base-dir R >& $@.err)
+	$(call gpu_run,cat $< | batkraken.sh gen1-print --alto $(KRAKEN_DEVICE) segment --model $(segment) -d horizontal-rl --baseline ocr --model print-n$(N)m$(M)a$(A)g$(G).out/alto-nall/ft_best.mlmodel --base-dir R >& $@.err)
 	touch $@
 
-gen2-print/_SUCCESS:	gen1-print-n$(N)m$(M).out/alto-nall/ft_best.mlmodel splits/_SUCCESS
+gen2-print/_SUCCESS:	gen1-print-n$(N)m$(M)a$(A)g$(G).out/alto-nall/ft_best.mlmodel splits/_SUCCESS
 	$(MAKE) `ls -1 splits/x* | sed -e 's/splits\//gen2-print\/jobs\/_/'`
 	touch $@
 
 gen2-print/jobs/_%:	splits/%
 	mkdir -p $(dir $@)
-	$(call slurm_run,cat $< | batkraken.sh gen2-print --alto $(KRAKEN_DEVICE) segment --model $(segment) -d horizontal-rl --baseline ocr --model gen1-print-n$(N)m$(M).out/alto-nall/ft_best.mlmodel --base-dir R >& $@.err)
+	$(call slurm_run,cat $< | batkraken.sh gen2-print --alto $(KRAKEN_DEVICE) segment --model $(segment) -d horizontal-rl --baseline ocr --model gen1-print-n$(N)m$(M)a$(A)g$(G).out/alto-nall/ft_best.mlmodel --base-dir R >& $@.err)
 	touch $@
 
 gen2-%.out/alto-union/alto.lis:	gen2-%.out/lines.json/_SUCCESS gen1-%.out/lines.json/_SUCCESS %.out/lines.json/_SUCCESS
@@ -116,4 +121,7 @@ electronic_texts.json/_SUCCESS:	electronic_texts
 %/ft_best.mlmodel:	%/dataset.arrow
 	$(call gpu_run,ketos train $(KRAKEN_DEVICE) --load $(ocr) --lrate 0.0001 --output $*/ft --normalization NFD --normalize-whitespace --resize add --fixed-splits --format-type binary $< >& $*/ft.err)
 
-all:	gen2-print-n7m5.out/alto-union/ft_best.mlmodel
+all:	gen2-print-n$(N)m$(M)a$(A)g$(G).out/alto-union/ft_best.mlmodel
+
+clean:
+	rm -rf */_SUCCESS *.out *.in print electronic_texts.json print
