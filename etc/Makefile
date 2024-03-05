@@ -74,7 +74,7 @@ images/%/_SUCCESS:	pdf/%.pdf
 
 splits/_SUCCESS:	images/_SUCCESS
 	mkdir -p $(dir $@)
-	find images -type f -name \*.jpg | split -l 100 - $(dir $@)x
+	find images -type f -name \*.png | split -l 100 - $(dir $@)x
 	touch $@
 
 print/_SUCCESS:	splits/_SUCCESS
@@ -124,4 +124,4 @@ electronic_texts.json/_SUCCESS:	electronic_texts
 all:	gen2-print-n$(N)m$(M)a$(A)g$(G).out/alto-union/ft_best.mlmodel
 
 clean:
-	rm -rf */_SUCCESS *.out *.in print electronic_texts.json print
+	rm -rf */_SUCCESS *.out *.in print splits electronic_texts.json print
