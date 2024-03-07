@@ -1,3 +1,11 @@
+This repository is an adaptation of acdc_train for our needs (Midrash project).
+Modifications made:
+- the gen2-print folder name dynamically takes into account the values of arguments N and M, when 'make all'.
+- added the ability to set arguments A and G (for alignment with Passim) when 'make all'.
+- added make clean to avoid conflicts when launching a new make all. Save your results before making a 'make clean' !
+
+Beware: acdc needs images with .png extension. If you use .jpg pictures for example, rename the files using .png extension.
+
 # Automatic Collation for Diversifying Corpora (ACDC)
 
 This package provides code for producing training data for optical character recognition and handwritten text recogntion (OCR and HTR) by aligning the output of an initial model on a collections of images with a collection of digital editions of similar texts.
